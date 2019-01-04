@@ -1,0 +1,14 @@
+*.idea
+*.ipynb_checkpoints
+__pycache__
+logs
+experiments
+data
+dataset
+datasets
+*.json
+*.png
+*.npy
+*.npz
+*.jpg
+*.jpeg
