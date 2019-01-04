@@ -116,7 +116,7 @@ class InformationEstimator(object):
         return mi_xy
 
     def entropy_with_gram(self, norm_gram):
-    	with tf.device('/cpu:0'):
+        with tf.device('/cpu:0'):
             eigvals, _ = tf.self_adjoint_eig(norm_gram)
             eigvals = tf.nn.relu(eigvals)  # Avoids small negatives
 
