@@ -1,1 +1,3 @@
-# information_estimator
+# entropy
+
+Entropy and Mutual Information Estimation

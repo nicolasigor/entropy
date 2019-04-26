@@ -6,6 +6,7 @@ experiments
 data
 dataset
 datasets
+results
 *.json
 *.png
 *.npy

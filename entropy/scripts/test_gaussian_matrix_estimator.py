@@ -3,42 +3,51 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import json
+import sys
 import time
 
 import numpy as np
-import tensorflow as tf
+import pandas as pd
 import seaborn as sns
+import tensorflow as tf
 sns.set(style="whitegrid")
 import matplotlib
 label_size = 9
 matplotlib.rcParams['xtick.labelsize'] = label_size
 matplotlib.rcParams['ytick.labelsize'] = label_size
-import matplotlib.pyplot as plt
-import pandas as pd
-
-from info_metrics import gaussian_dataset
-from info_metrics.information_estimator_v2 import InformationEstimator
-
 y_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
+import matplotlib.pyplot as plt
+
+# Project root path
+PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.append(PROJECT_ROOT)
+
+from entropy.modules.correlated_gaussians import CorrelatedGaussians
+from entropy.modules.matrix_estimator import MatrixEstimator
+from entropy.utils import constants
+
+RESULTS_DIR = os.path.join(PROJECT_ROOT, 'entropy', 'results')
 
 
 if __name__ == '__main__':
-
-    start_time = time.time()
-
     # Settings of experiment
     batch_size_list = [100]
     sigma_zero_list = [2.0]
+    dimension_list = [1, 10, 100, 1000]
     n_tries = 10
-    dimension_list = [1, 10, 100, 1000, 5000]
 
+    data = CorrelatedGaussians(mode=constants.MODE_TENSORFLOW)
+    test_name = 'matrix'
+
+    print('Correlated Gaussians Test for %s:' % test_name)
     print('Batch size list', batch_size_list)
     print('Sigma zero list', sigma_zero_list)
     print('Dimension list', dimension_list)
     print('')
 
-    figsize = (15, 6)
+    n_dims = len(dimension_list)
+    figsize = (3 * n_dims, 6)
 
     n_dims = len(dimension_list)
     corr_factors = [i * 0.1 for i in range(10)]
@@ -51,31 +60,35 @@ if __name__ == '__main__':
     for i, dimension in enumerate(dimension_list):
         print('Dimension %d' % dimension)
         for corr_factor in corr_factor_list:
-            mut_info = gaussian_dataset.get_shannon_mut_info(
+            mut_info = data.get_shannon_mi(
                 dimension, corr_factor)
             shannon_data['dimension'].append(dimension)
             shannon_data['corr_factor'].append(corr_factor)
             shannon_data['value'].append(mut_info)
 
     # Estimation
+    start_time = time.time()
     for batch_size in batch_size_list:
         # Saving data
-        principe_data = {'dimension': [], 'corr_factor': [], 'sigma_0': [],
-                         'try': [], 'value': []}
-
+        estimator_data = {'dimension': [], 'corr_factor': [], 'sigma_0': [],
+                          'try': [], 'value': []}
         for sigma_zero in sigma_zero_list:
+            estimator = MatrixEstimator(sigma_zero)
+
             for dimension in dimension_list:
-                print('\nSamples %d, Sigma_0 %s' % (batch_size, sigma_zero))
-                print('Dimension %d' % dimension)
-        
-                # Estimation
+                print('\nSamples %d. Sigma_0 %s. Dimension %d'
+                      % (batch_size, sigma_zero, dimension))
+
                 tf.reset_default_graph()
-                estimator = InformationEstimator(sigma_zero)
                 corr_factor_ph = tf.placeholder(tf.float32, shape=())
-                x_samples, y_samples = gaussian_dataset.generate_batch_tf(
+                x_samples, y_samples = data.sample(
                     dimension, corr_factor_ph, batch_size)
-                mi_estimation_tf = estimator.mutual_information(x_samples, y_samples)
-                sess = tf.Session()
+                mi_estimation_tf = estimator.mutual_information(
+                    x_samples, y_samples)
+                # Tensorflow session for graph management
+                config = tf.ConfigProto()
+                config.gpu_options.allow_growth = True
+                sess = tf.Session(config=config)
         
                 for corr_factor in corr_factor_list:
                     print('Correlation factor %1.1f' % corr_factor)
@@ -85,12 +98,11 @@ if __name__ == '__main__':
                             mi_estimation_tf,
                             feed_dict={corr_factor_ph: corr_factor})
         
-                        principe_data['dimension'].append(dimension)
-                        principe_data['corr_factor'].append(corr_factor)
-                        principe_data['sigma_0'].append(sigma_zero)
-                        principe_data['try'].append(i_try)
-                        principe_data['value'].append(float(mi_estimation_np))     
-
+                        estimator_data['dimension'].append(dimension)
+                        estimator_data['corr_factor'].append(corr_factor)
+                        estimator_data['sigma_0'].append(sigma_zero)
+                        estimator_data['try'].append(i_try)
+                        estimator_data['value'].append(mi_estimation_np)
         end_time = time.time()
         print('E.T.:', end_time - start_time)
 
@@ -99,14 +111,14 @@ if __name__ == '__main__':
         # ---------------------------------------------------------------
         # Plot results
         shannon_df = pd.DataFrame.from_dict(shannon_data)
-        principe_df = pd.DataFrame.from_dict(principe_data)
+        estimator_df = pd.DataFrame.from_dict(estimator_data)
 
         shannon_df['name'] = 'Shannon MI'
-        principe_df['name'] = 'Estimation'
+        estimator_df['name'] = 'Estimation'
         # columns: dimension  corr_factor  sigma_0  try     value
 
-        sigma_0_list = principe_df.sigma_0.unique()
-        dimension_list = principe_df.dimension.unique()
+        sigma_0_list = estimator_df.sigma_0.unique()
+        dimension_list = estimator_df.dimension.unique()
         n_dims = len(dimension_list)
     
         for s in sigma_0_list:
@@ -126,12 +138,12 @@ if __name__ == '__main__':
                 ax[0, j].set_ylabel('')
                 ax[0, j].set_title('Dimensionality: %d' % d)
     
-                mini_principe_df = principe_df.loc[
-                    (principe_df['dimension'] == d)
-                    & (principe_df['sigma_0'] == s)]
+                mini_estimator_df = estimator_df.loc[
+                    (estimator_df['dimension'] == d)
+                    & (estimator_df['sigma_0'] == s)]
                 ax[1, j] = sns.lineplot(
                     x="corr_factor", y="value", style='name', markers=True,
-                    data=mini_principe_df, ax=ax[1, j])
+                    data=mini_estimator_df, ax=ax[1, j])
                 handles, labels = ax[1, j].get_legend_handles_labels()
                 ax[1, j].legend(handles=handles[1:], labels=labels[1:])
                 ax[1, j].set_ylabel('')
@@ -140,5 +152,9 @@ if __name__ == '__main__':
                     'Batch size: %d, $\sigma_0$: %1.1f' % (batch_size, s))
                 ax[1, j].yaxis.set_major_formatter(y_formatter)
             plt.tight_layout()
-            filename = 'gaussian_batch%d_sigma%1.1f.png' % (batch_size, s)
+
+            os.makedirs(RESULTS_DIR, exist_ok=True)
+            filename = os.path.join(
+                RESULTS_DIR,
+                'gaussian_%s_batch%d.png' % (test_name, batch_size))
             fig.savefig(filename)

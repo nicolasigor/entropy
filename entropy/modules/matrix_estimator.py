@@ -1,15 +1,21 @@
 """
-@author Nicolas Tapia, Daniel Baeza
+@author Nicolas Tapia
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import numpy as np
 import tensorflow as tf
 
+from entropy.utils import checks
+from entropy.utils import constants
 
-class InformationEstimator(object):
+EPS = np.finfo(float).eps
+
+
+class MatrixEstimator(object):
     """ TensorFlow implementation of estimator proposed in:
 
     Giraldo, L. G. S., Rao, M., & Principe, J. C. (2015). Measures of entropy
@@ -41,7 +47,6 @@ class InformationEstimator(object):
 
     Note that normalize_scale=False and normalize_dimension=False will give you
     the original version of the estimator.
-
     """
 
     def __init__(
@@ -58,6 +63,25 @@ class InformationEstimator(object):
         self.normalize_scale = normalize_scale
         self.normalize_dimension = normalize_dimension
 
+    def _compute_sigma(self, x):
+        x_dims = tf.shape(x)
+        n = tf.to_float(x_dims[0])
+        d = tf.to_float(x_dims[1])
+        sigma = self.sigma_zero * n ** (-1 / (4 + d))
+        if self.normalize_dimension:
+            sigma = sigma * tf.sqrt(d)
+        return sigma
+
+    def _normalize_variable(self, x, x_is_image):
+        if x_is_image:
+            mean_x = tf.reduce_mean(x)
+            var_x = tf.reduce_mean(tf.square(x - mean_x))
+        else:
+            mean_x, var_x = tf.nn.moments(x, [0])
+        std_x = tf.sqrt(var_x + self.epsilon)
+        x = (x - mean_x) / std_x
+        return x
+
     def normalized_gram(self, x, sigma_x=None, x_is_image=False):
         """If sigma_x is provided, then that value will be used. Otherwise
         it will be automatically computed using the formula.
@@ -69,17 +93,17 @@ class InformationEstimator(object):
             sigma_x = self._compute_sigma(x)
         if self.normalize_scale:
             x = self._normalize_variable(x, x_is_image)
-        
+
         # # Compute differences directly to avoid numerical instability
         # pairwise_difference = x[:, tf.newaxis, :] - x[tf.newaxis, :, :]
         # pairwise_squared_difference = tf.square(pairwise_difference)
         # pairwise_distance = tf.reduce_sum(
         #     pairwise_squared_difference, axis=2)
-        
+
         pairwise_dot = tf.matmul(x, tf.transpose(x))
         norms = tf.diag_part(pairwise_dot)
         norms = tf.reshape(norms, [-1, 1])
-        pairwise_distance = norms - 2*pairwise_dot + tf.transpose(norms)
+        pairwise_distance = norms - 2 * pairwise_dot + tf.transpose(norms)
 
         # Avoids small negatives due to numerical precision
         pairwise_distance = tf.nn.relu(pairwise_distance)
@@ -115,6 +139,12 @@ class InformationEstimator(object):
         mi_xy = self.mutual_information_with_gram(norm_gram_a, norm_gram_b)
         return mi_xy
 
+    def conditional_entropy(self, x, y):
+        pass
+
+    def conditional_mutual_information(self, x, y, z):
+        pass
+
     def entropy_with_gram(self, norm_gram):
         with tf.device('/cpu:0'):
             eigvals, _ = tf.self_adjoint_eig(norm_gram)
@@ -141,21 +171,9 @@ class InformationEstimator(object):
         mi_xy = h_x + h_y - h_xy
         return mi_xy
 
-    def _compute_sigma(self, x):
-        x_dims = tf.shape(x)
-        n = tf.to_float(x_dims[0])
-        d = tf.to_float(x_dims[1])
-        sigma = self.sigma_zero * n ** (-1 / (4 + d))
-        if self.normalize_dimension:
-            sigma = sigma * tf.sqrt(d)
-        return sigma
+    def conditional_entropy_with_gram(self, norm_gram_a, norm_gram_b):
+        pass
 
-    def _normalize_variable(self, x, x_is_image):
-        if x_is_image:
-            mean_x = tf.reduce_mean(x)
-            var_x = tf.reduce_mean(tf.square(x - mean_x))
-        else:
-            mean_x, var_x = tf.nn.moments(x, [0])
-        std_x = tf.sqrt(var_x + self.epsilon)
-        x = (x - mean_x) / std_x
-        return x
+    def conditional_mutual_information_with_gram(
+            self, norm_gram_a, norm_gram_b, norm_gram_c):
+        pass
