@@ -39,7 +39,7 @@ class MatrixEstimator(object):
 
     If normalize_dimension is set to True, then sigma is computed as:
 
-    sigma = sigma_0 * sqrt(d) * n ^ (-1 / (4+d))
+    sigma = sigma_0 * sqrt(2d) * n ^ (-1 / (4+d))
 
     This is done to center the distribution of pair-wise distances to the same
     mean across variables with different dimensions, and as a consequence
@@ -69,7 +69,7 @@ class MatrixEstimator(object):
         d = tf.to_float(x_dims[1])
         sigma = self.sigma_zero * n ** (-1 / (4 + d))
         if self.normalize_dimension:
-            sigma = sigma * tf.sqrt(d)
+            sigma = sigma * tf.sqrt(2 * d)
         return sigma
 
     def _normalize_variable(self, x, x_is_image):

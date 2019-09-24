@@ -33,12 +33,14 @@ RESULTS_DIR = os.path.join(PROJECT_ROOT, 'entropy', 'results')
 if __name__ == '__main__':
     # Settings of experiment
     batch_size_list = [100]
-    sigma_zero_list = [2.0]
+    sigma_zero_list = [1.0]
     dimension_list = [1, 10, 100, 1000]
     n_tries = 10
+    normalize_scale = True
+    normalize_dimension = True
+    test_name = 'matrix'
 
     data = CorrelatedGaussians(mode=constants.MODE_TENSORFLOW)
-    test_name = 'matrix'
 
     print('Correlated Gaussians Test for %s:' % test_name)
     print('Batch size list', batch_size_list)
@@ -73,7 +75,10 @@ if __name__ == '__main__':
         estimator_data = {'dimension': [], 'corr_factor': [], 'sigma_0': [],
                           'try': [], 'value': []}
         for sigma_zero in sigma_zero_list:
-            estimator = MatrixEstimator(sigma_zero)
+            estimator = MatrixEstimator(
+                sigma_zero,
+                normalize_scale=normalize_scale,
+                normalize_dimension=normalize_dimension)
 
             for dimension in dimension_list:
                 print('\nSamples %d. Sigma_0 %s. Dimension %d'
