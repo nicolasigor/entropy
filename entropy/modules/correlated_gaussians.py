@@ -6,11 +6,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numpy as np
-import tensorflow as tf
+import os
+import sys
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(PROJECT_ROOT)
 
-from entropy.utils import checks
-from entropy.utils import constants
+import numpy as np
+import tensorflow as tf  # TF 1.x
 
 
 class CorrelatedGaussians(object):
@@ -21,17 +23,18 @@ class CorrelatedGaussians(object):
         corr(Xi, Zj) = corr_factor * delta_ij
     """
 
-    def __init__(self, mode=constants.MODE_NUMPY):
+    def __init__(self, mode="numpy"):
         """
         Args:
-             mode: ([MODE_NUMPY, MODE_TENSORFLOW]) Mode of operation
-                for sampling the dataset. If MODE_NUMPY, then the dataset
-                samples numpy arrays. If MODE_TENSORFLOW, then the dataset
+             mode: (["numpy", "tensorflow"]) Mode of operation
+                for sampling the dataset. If "numpy", then the dataset
+                samples numpy arrays. If "tensorflow", then the dataset
                 returns tensorflow operations for sampling. Defaults to
-                MODE_NUMPY.
+                "numpy".
         """
-        checks.check_valid_value(
-            mode, 'mode', [constants.MODE_NUMPY, constants.MODE_TENSORFLOW])
+        if mode not in ["numpy", "tensorflow"]:
+            msg = 'Expected ["numpy", "tensorflow"] for mode, but %s was provided.' % mode
+            raise ValueError(msg)
         self.mode = mode
 
     def sample(self, dimension, corr_factor, n_samples):
@@ -47,7 +50,7 @@ class CorrelatedGaussians(object):
              samples_x: Samples of first variable.
              samples_z: Samples of second variable.
         """
-        if self.mode == constants.MODE_TENSORFLOW:
+        if self.mode == "tensorflow":
             samples_x, samples_z = self._generate_batch_tf(
                 dimension, corr_factor, n_samples)
         else:
