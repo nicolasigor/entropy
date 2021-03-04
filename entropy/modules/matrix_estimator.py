@@ -66,7 +66,8 @@ class MatrixEstimator(object):
             epsilon=1e-8,
             normalize_scale=True,
             normalize_dimension=True,
-            log_base=2
+            log_base=2,
+            use_memory_efficient_gram=False,
     ):
         self.gamma = gamma
         self.alpha = alpha
@@ -74,6 +75,7 @@ class MatrixEstimator(object):
         self.normalize_scale = normalize_scale
         self.normalize_dimension = normalize_dimension
         self.log_base = log_base
+        self.use_memory_efficient_gram = use_memory_efficient_gram
 
     def _compute_sigma(self, x):
         x_dims = tf.shape(x)
@@ -107,9 +109,28 @@ class MatrixEstimator(object):
             x = self._normalize_variable(x, x_is_image)
 
         # Compute pairwise distances (distance matrix)
-        pairwise_difference = x[:, tf.newaxis, :] - x[tf.newaxis, :, :]
-        pairwise_squared_difference = tf.square(pairwise_difference)
-        pairwise_distance = tf.reduce_sum(pairwise_squared_difference, axis=2)
+        if self.use_memory_efficient_gram:
+            # This option stores a smaller tensor in memory, which might be more convenient for you
+            # when the dimensionality of the variable is too large, at the cost of introducing some
+            # rounding errors due to the intermediate steps
+            # (although I expect them to be insignificant in most cases),
+            # because it performs
+            # (N, Dim) matmul (Dim, N) = (N, N)
+            # thanks to an equivalent formulation of the pairwise distances
+            pairwise_dot = tf.matmul(x, tf.transpose(x))  # (N, N) = (N, Dim) matmul (Dim, N)
+            norms = tf.diag_part(pairwise_dot)  # (N,)
+            norms = tf.reshape(norms, [-1, 1])  # (N, 1)
+            pairwise_distance = norms - 2 * pairwise_dot + tf.transpose(norms)  # (N, N) = (N, 1) - (N, N) + (1, N)
+            # Avoids small negatives due to possible rounding errors
+            pairwise_distance = tf.nn.relu(pairwise_distance)  # (N, N)
+        else:
+            # This option is more robust to rounding errors at the cost of storing a larger tensor
+            # in memory, because it performs
+            # (N, 1, Dim) - (1, N, Dim) = (N, N, Dim)
+            # which is the straightforward difference matrix that is then squared and reduced to (N, N)
+            pairwise_difference = x[:, tf.newaxis, :] - x[tf.newaxis, :, :]  # (N, N, Dim) = (N, 1, Dim) - (1, N, Dim)
+            pairwise_squared_difference = tf.square(pairwise_difference)  # (N, N, Dim)
+            pairwise_distance = tf.reduce_sum(pairwise_squared_difference, axis=2)  # (N, N)
 
         # We don't bother with the normalization constant of the gaussian kernel
         # since it is canceled out during normalization of the Gram matrix
